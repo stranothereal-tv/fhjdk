@@ -1,4 +1,7 @@
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/maqzvavq';
+const SUPABASE_REST_URL = 'https://eskrabhfpxnpoqnpieou.supabase.co/rest/v1';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_c7y_c6oeVpFK53zlvQCaLQ_m-RUVw1a';
+const SUPABASE_WAITLIST_TABLE = 'waitlist_submissions';
 
 const form = document.querySelector('#waitlist-form');
 const releasedRadios = document.querySelectorAll('input[name="released"]');
@@ -82,18 +85,16 @@ function saveLocalSubmission(submission) {
   localStorage.setItem('solvaroWaitlistSubmissions', JSON.stringify(submissions));
 }
 
-async function sendToFormspree(formData) {
-  const response = await fetch(FORMSPREE_ENDPOINT, {
-    method: 'POST',
-    body: formData,
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error('Formspree submission failed.');
-  }
-}
-
-releasedRadios.forEach((radio) => {
-  radio.addEventListener('change', updateConditionalFields);
-});
+function buildSupabasePayload(submission) {
+  return {
+    full_name: submission.fullName,
+    artist_name: submission.artistName,
+    email: submission.email,
+    phone_number: submission.phoneNumber,
+    social_accounts: submission.socialAccounts,
+    youtube_channel: submission.youtubeChannel,
+    released_music: submission.releasedMusic,
+    spotify_artist_profile: submission.spotifyArtistProfile,
+    song_file_name: submission.songFileName,
+    submission_date: submission.submissionDate,
+  };
