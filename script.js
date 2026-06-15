@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js';
 
 const supabase = createClient(
   'https://eskrabhfpxnpoqnpieou.supabase.co',
-  'YOUR_PUBLISHABLE_KEY'
+  'sb_publishable_c7y_c6oeVpFK53zlvQCaLQ_m-RUVw1a'
 );
 
 const form = document.querySelector('#waitlist-form');
