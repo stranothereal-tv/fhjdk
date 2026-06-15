@@ -5,89 +5,73 @@ const songSection = document.querySelector('#song-section');
 const spotifyInput = document.querySelector('#spotify-profile');
 const songInput = document.querySelector('#song-file');
 
-const spotifyArtistUrlPattern = /^https:\/\/open\.spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?#].*)?$/;
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwELUkayTphsvnsS7ePUvWQelIc5iPNFGYaXs_J9V5119qmiLX9RdCCb37yExNQrluc/exec";
 
-function setSectionState(section, isVisible) {
-  section.classList.toggle('conditional-section--visible', isVisible);
-  section.setAttribute('aria-hidden', String(!isVisible));
-}
-
-function updateSelectedRadioState() {
-  releasedRadios.forEach((radio) => {
-    radio.closest('.radio-card').classList.toggle('radio-card--selected', radio.checked);
-  });
+function setSectionState(section, visible) {
+  section.style.display = visible ? "block" : "none";
 }
 
 function updateConditionalFields() {
-  const releasedMusic = form.elements.released.value;
-  const isReleased = releasedMusic === 'yes';
-  const isUnreleased = releasedMusic === 'no';
+  const released = form.elements.released.value;
 
-  updateSelectedRadioState();
-  setSectionState(spotifySection, isReleased);
-  setSectionState(songSection, isUnreleased);
+  if (released === "yes") {
+    setSectionState(spotifySection, true);
+    setSectionState(songSection, false);
 
-  spotifyInput.required = isReleased;
-  songInput.required = isUnreleased;
+    spotifyInput.required = true;
+    songInput.required = false;
+  } else if (released === "no") {
+    setSectionState(spotifySection, false);
+    setSectionState(songSection, true);
 
-  if (!isReleased) {
-    spotifyInput.value = '';
-    spotifyInput.setCustomValidity('');
-  }
-
-  if (!isUnreleased) {
-    songInput.value = '';
-    songInput.setCustomValidity('');
+    spotifyInput.required = false;
+    songInput.required = true;
   }
 }
 
-function validateSpotifyProfile() {
-  if (!spotifyInput.required || spotifyArtistUrlPattern.test(spotifyInput.value.trim())) {
-    spotifyInput.setCustomValidity('');
-    return true;
-  }
-
-  spotifyInput.setCustomValidity('Please enter a valid Spotify Artist Profile URL.');
-  return false;
-}
-
-function buildSubmission() {
-  const formData = new FormData(form);
-  const songFile = songInput.files[0];
-
-  return {
-    fullName: formData.get('fullName'),
-    artistName: formData.get('artistName'),
-    email: formData.get('email'),
-    phoneNumber: formData.get('phone'),
-    socialAccounts: formData.get('socials'),
-    youtubeChannel: formData.get('youtube'),
-    releasedMusic: formData.get('released'),
-    spotifyArtistProfile: formData.get('released') === 'yes' ? formData.get('spotifyArtistProfile') : '',
-    songFileUrl: formData.get('released') === 'no' && songFile ? URL.createObjectURL(songFile) : '',
-    songFileName: formData.get('released') === 'no' && songFile ? songFile.name : '',
-    submissionDate: new Date().toISOString(),
-  };
-}
-
-releasedRadios.forEach((radio) => {
-  radio.addEventListener('change', updateConditionalFields);
+releasedRadios.forEach(radio => {
+  radio.addEventListener("change", updateConditionalFields);
 });
 
-spotifyInput.addEventListener('input', validateSpotifyProfile);
 updateConditionalFields();
 
-form.addEventListener('submit', (event) => {
-  event.preventDefault();
-  updateConditionalFields();
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
 
-  if (!validateSpotifyProfile() || !form.reportValidity()) {
-    return;
+  if (!form.reportValidity()) return;
+
+  const data = {
+    fullName: form.fullName.value,
+    artistName: form.artistName.value,
+    email: form.email.value,
+    phoneNumber: form.phone.value,
+    socialAccounts: form.socials.value,
+    youtubeChannel: form.youtube.value,
+    releasedMusic: form.released.value,
+    spotifyArtistProfile:
+      form.released.value === "yes"
+        ? spotifyInput.value
+        : "",
+    songFileUrl: "",
+    submissionDate: new Date().toISOString()
+  };
+
+  try {
+    const response = await fetch(SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+
+    const result = await response.text();
+
+    console.log(result);
+
+    alert("Application submitted successfully!");
+
+    window.location.href = "Thanks.html";
+
+  } catch (error) {
+    console.error(error);
+    alert("Error sending application.");
   }
-
-  const submissions = JSON.parse(localStorage.getItem('solvaroWaitlistSubmissions') || '[]');
-  submissions.push(buildSubmission());
-  localStorage.setItem('solvaroWaitlistSubmissions', JSON.stringify(submissions));
-
-  window.location.href = './thanks.html';
 });
