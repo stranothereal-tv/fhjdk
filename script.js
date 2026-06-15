@@ -1,5 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js';
 
+console.log("SCRIPT LOADED");
+
 const supabase = createClient(
   'https://eskrabhfpxnpoqnpieou.supabase.co',
   'sb_publishable_c7y_c6oeVpFK53zlvQCaLQ_m-RUVw1a'
