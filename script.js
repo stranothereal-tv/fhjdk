@@ -1,11 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js';
-
-console.log("SCRIPT LOADED");
-
-const supabase = createClient(
-  'https://eskrabhfpxnpoqnpieou.supabase.co',
-  'sb_publishable_c7y_c6oeVpFK53zlvQCaLQ_m-RUVw1a'
-);
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/maqzvavq';
 
 const form = document.querySelector('#waitlist-form');
 const releasedRadios = document.querySelectorAll('input[name="released"]');
@@ -13,133 +6,94 @@ const spotifySection = document.querySelector('#spotify-section');
 const songSection = document.querySelector('#song-section');
 const spotifyInput = document.querySelector('#spotify-profile');
 const songInput = document.querySelector('#song-file');
+const submissionDateInput = document.querySelector('#submission-date');
+const formStatus = document.querySelector('#form-status');
+const submitButton = form.querySelector('button[type="submit"]');
 
-const spotifyArtistUrlPattern =
-  /^https:\/\/open\.spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?#].*)?$/;
+const spotifyArtistUrlPattern = /^https:\/\/open\.spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?#].*)?$/;
 
 function setSectionState(section, isVisible) {
-  section.style.display = isVisible ? 'block' : 'none';
+  section.classList.toggle('conditional-section--visible', isVisible);
+  section.setAttribute('aria-hidden', String(!isVisible));
+}
+
+function updateSelectedRadioState() {
+  releasedRadios.forEach((radio) => {
+    radio.closest('.radio-card').classList.toggle('radio-card--selected', radio.checked);
+  });
 }
 
 function updateConditionalFields() {
   const releasedMusic = form.elements.released.value;
-
   const isReleased = releasedMusic === 'yes';
   const isUnreleased = releasedMusic === 'no';
 
+  updateSelectedRadioState();
   setSectionState(spotifySection, isReleased);
   setSectionState(songSection, isUnreleased);
 
   spotifyInput.required = isReleased;
+  spotifyInput.disabled = !isReleased;
   songInput.required = isUnreleased;
+  songInput.disabled = !isUnreleased;
 
   if (!isReleased) {
     spotifyInput.value = '';
+    spotifyInput.setCustomValidity('');
+  }
+
+  if (!isUnreleased) {
+    songInput.value = '';
+    songInput.setCustomValidity('');
   }
 }
 
 function validateSpotifyProfile() {
-  if (!spotifyInput.required) return true;
-
-  if (spotifyArtistUrlPattern.test(spotifyInput.value.trim())) {
+  if (!spotifyInput.required || spotifyArtistUrlPattern.test(spotifyInput.value.trim())) {
     spotifyInput.setCustomValidity('');
     return true;
   }
 
-  spotifyInput.setCustomValidity(
-    'Please enter a valid Spotify Artist URL'
-  );
-
-  form.reportValidity();
+  spotifyInput.setCustomValidity('Please enter a valid Spotify Artist Profile URL.');
   return false;
+}
+
+function buildSubmission(submissionDate) {
+  const formData = new FormData(form);
+  const songFile = songInput.files[0];
+
+  return {
+    fullName: formData.get('fullName'),
+    artistName: formData.get('artistName'),
+    email: formData.get('email'),
+    phoneNumber: formData.get('phone'),
+    socialAccounts: formData.get('socials'),
+    youtubeChannel: formData.get('youtube'),
+    releasedMusic: formData.get('released'),
+    spotifyArtistProfile: formData.get('released') === 'yes' ? formData.get('spotifyArtistProfile') : '',
+    songFileName: formData.get('released') === 'no' && songFile ? songFile.name : '',
+    submissionDate,
+  };
+}
+
+function saveLocalSubmission(submission) {
+  const submissions = JSON.parse(localStorage.getItem('solvaroWaitlistSubmissions') || '[]');
+  submissions.push(submission);
+  localStorage.setItem('solvaroWaitlistSubmissions', JSON.stringify(submissions));
+}
+
+async function sendToFormspree(formData) {
+  const response = await fetch(FORMSPREE_ENDPOINT, {
+    method: 'POST',
+    body: formData,
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error('Formspree submission failed.');
+  }
 }
 
 releasedRadios.forEach((radio) => {
   radio.addEventListener('change', updateConditionalFields);
-});
-
-updateConditionalFields();
-
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-
-  if (!form.reportValidity()) return;
-  if (!validateSpotifyProfile()) return;
-
-  const submitButton = form.querySelector(
-    'button[type="submit"]'
-  );
-
-  submitButton.disabled = true;
-  submitButton.textContent = 'Submitting...';
-
-  try {
-    let songUrl = '';
-
-    if (
-      form.elements.released.value === 'no' &&
-      songInput.files.length > 0
-    ) {
-      const file = songInput.files[0];
-
-      const fileName =
-        Date.now() +
-        '-' +
-        file.name.replace(/\s+/g, '_');
-
-      const { error: uploadError } = await supabase
-        .storage
-        .from('audio-uploads')
-        .upload(fileName, file);
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const { data } = supabase
-        .storage
-        .from('audio-uploads')
-        .getPublicUrl(fileName);
-
-      songUrl = data.publicUrl;
-    }
-
-    const payload = {
-      full_name: form.elements.fullName.value.trim(),
-      artist_name: form.elements.artistName.value.trim(),
-      email: form.elements.email.value.trim(),
-      phone: form.elements.phone.value.trim(),
-      social_accounts: form.elements.socials.value.trim(),
-      youtube_channel: form.elements.youtube.value.trim(),
-      released_music:
-        form.elements.released.value === 'yes',
-      spotify_profile:
-        form.elements.released.value === 'yes'
-          ? spotifyInput.value.trim()
-          : '',
-      song_file_url: songUrl
-    };
-
-    const { error } = await supabase
-      .from('waitlist')
-      .insert([payload]);
-
-    if (error) {
-      throw error;
-    }
-
-    window.location.href = 'thanks.html';
-
-  } catch (error) {
-    console.error(error);
-
-    alert(
-      error.message ||
-      'Submission failed. Please try again.'
-    );
-  } finally {
-    submitButton.disabled = false;
-    submitButton.textContent =
-      'Submit to waitlist';
-  }
 });
