@@ -5,73 +5,131 @@ const songSection = document.querySelector('#song-section');
 const spotifyInput = document.querySelector('#spotify-profile');
 const songInput = document.querySelector('#song-file');
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwELUkayTphsvnsS7ePUvWQelIc5iPNFGYaXs_J9V5119qmiLX9RdCCb37yExNQrluc/exec";
+const CLOUD_NAME = "dn9aiiknm";
+const UPLOAD_PRESET = "solvaro_uploads";
 
-function setSectionState(section, visible) {
-  section.style.display = visible ? "block" : "none";
+const spotifyArtistUrlPattern =
+  /^https:\/\/open\.spotify\.com\/artist\/[A-Za-z0-9]+(?:[/?#].*)?$/;
+
+function setSectionState(section, isVisible) {
+  section.style.display = isVisible ? "block" : "none";
 }
 
 function updateConditionalFields() {
-  const released = form.elements.released.value;
+  const releasedMusic = form.elements.released.value;
 
-  if (released === "yes") {
-    setSectionState(spotifySection, true);
-    setSectionState(songSection, false);
+  const isReleased = releasedMusic === "yes";
+  const isUnreleased = releasedMusic === "no";
 
-    spotifyInput.required = true;
-    songInput.required = false;
-  } else if (released === "no") {
-    setSectionState(spotifySection, false);
-    setSectionState(songSection, true);
+  setSectionState(spotifySection, isReleased);
+  setSectionState(songSection, isUnreleased);
 
-    spotifyInput.required = false;
-    songInput.required = true;
-  }
+  spotifyInput.required = isReleased;
+  songInput.required = isUnreleased;
+
+  if (!isReleased) spotifyInput.value = "";
 }
 
-releasedRadios.forEach(radio => {
+function validateSpotifyProfile() {
+  if (!spotifyInput.required) return true;
+
+  if (spotifyArtistUrlPattern.test(spotifyInput.value.trim())) {
+    spotifyInput.setCustomValidity("");
+    return true;
+  }
+
+  spotifyInput.setCustomValidity(
+    "Please enter a valid Spotify Artist URL"
+  );
+
+  return false;
+}
+
+async function uploadSongToCloudinary(file) {
+  const formData = new FormData();
+
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
+    {
+      method: "POST",
+      body: formData
+    }
+  );
+
+  const data = await response.json();
+
+  if (!data.secure_url) {
+    throw new Error("Upload failed");
+  }
+
+  return data.secure_url;
+}
+
+releasedRadios.forEach((radio) => {
   radio.addEventListener("change", updateConditionalFields);
 });
 
 updateConditionalFields();
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
 
   if (!form.reportValidity()) return;
+  if (!validateSpotifyProfile()) return;
 
-  const data = {
-    fullName: form.fullName.value,
-    artistName: form.artistName.value,
-    email: form.email.value,
-    phoneNumber: form.phone.value,
-    socialAccounts: form.socials.value,
-    youtubeChannel: form.youtube.value,
-    releasedMusic: form.released.value,
-    spotifyArtistProfile:
-      form.released.value === "yes"
-        ? spotifyInput.value
-        : "",
-    songFileUrl: "",
-    submissionDate: new Date().toISOString()
-  };
+  const submitButton = form.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  submitButton.textContent = "Submitting...";
 
   try {
-    const response = await fetch(SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify(data)
-    });
+    let songUrl = "";
 
-    const result = await response.text();
+    if (
+      form.elements.released.value === "no" &&
+      songInput.files.length > 0
+    ) {
+      songUrl = await uploadSongToCloudinary(songInput.files[0]);
+    }
 
-    console.log(result);
+    const submission = {
+      fullName: form.elements.fullName.value,
+      artistName: form.elements.artistName.value,
+      email: form.elements.email.value,
+      phone: form.elements.phone.value,
+      socials: form.elements.socials.value,
+      youtube: form.elements.youtube.value,
+      released: form.elements.released.value,
+      spotifyArtistProfile:
+        form.elements.released.value === "yes"
+          ? spotifyInput.value
+          : "",
+      songUrl: songUrl,
+      submittedAt: new Date().toISOString()
+    };
 
-    alert("Application submitted successfully!");
+    const existing =
+      JSON.parse(
+        localStorage.getItem("solvaroWaitlistSubmissions")
+      ) || [];
 
-    window.location.href = "Thanks.html";
+    existing.push(submission);
 
+    localStorage.setItem(
+      "solvaroWaitlistSubmissions",
+      JSON.stringify(existing)
+    );
+
+    window.location.href = "thanks.html";
   } catch (error) {
     console.error(error);
-    alert("Error sending application.");
+    alert(
+      "Cloudinary upload failed. Check your Upload Preset settings."
+    );
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Submit to waitlist";
   }
 });
